@@ -2,7 +2,7 @@ cimport cython
 from cython.parallel import prange, parallel, threadid
 import numpy as np
 cimport numpy as np
-from scipy.signal.sigtools import _correlateND
+#from scipy.signal.sigtools import _correlateND
 import ctypes
 
 DTYPE = np.uint8

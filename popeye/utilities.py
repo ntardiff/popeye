@@ -15,12 +15,12 @@ import numpy as np
 import nibabel
 from scipy.stats import gamma
 from scipy.optimize import brute, fmin_powell, fmin, least_squares, minimize
-from scipy.stats import linregress
+# from scipy.stats import linregress
 from scipy.integrate import romb, trapz
-from scipy import c_, ones, dot, stats, diff
-from scipy.linalg import inv, solve, det, norm
-from numpy import log, pi, sqrt, square, diagonal
-from numpy.random import randn, seed
+# from scipy import c_, ones, dot, stats, diff
+# from scipy.linalg import inv, solve, det, norm
+# from numpy import log, pi, sqrt, square, diagonal
+# from numpy.random import randn, seed
 import sharedmem
 import numba
 
