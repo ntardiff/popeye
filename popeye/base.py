@@ -323,6 +323,7 @@ class PopulationFit(object):
     @auto_attr
     def ballpark(self):
         
+        
         if self.model.cached_model_path is not None: # pragma: no cover
             return self.best_cached_model_parameters
         else:

@@ -429,7 +429,7 @@ def gradient_descent_search(data, error_function, objective_function, parameters
 def stacker(x,y):
     return np.hstack((x,y))
 
-@numba.jit(nopython=True, parallel=False)
+@numba.jit(nopython=False, parallel=False)
 def rss(data,prediction):
     return np.nansum((data-prediction)**2)
 
@@ -527,7 +527,7 @@ def brute_force_search(data, error_function, objective_function, grids, Ns=None,
        The model solution given `parameters` and `objective_function`.
 
     """
-
+    
     # if user provides their own grids
     if isinstance(grids[0], SliceType):
         output = brute(error_function_rss,
@@ -546,8 +546,6 @@ def brute_force_search(data, error_function, objective_function, grids, Ns=None,
                finish=None,
                full_output=True,
                disp=False)
-
-
     return output
 
 # generic error function
@@ -796,7 +794,8 @@ def xval_bundle(bootstraps, kfolds, Fit, model, data, grids, bounds, indices, au
             if kfolds == 1: # leave one out
                 trn_idx = np.random.choice(runs, len(runs)-1, replace=False)
             else:
-                trn_idx = np.random.choice(runs, np.int(len(runs)/kfolds), replace=False)
+                trn_idx = np.random.choice(runs, int(len(runs)/kfolds), replace=False)
+                # trn_idx = np.random.choice(runs, np.int(len(runs)/kfolds), replace=False)
             
             tst_idx = np.array(list(set(runs)-set(trn_idx)))
             
@@ -816,7 +815,7 @@ def xval_bundle(bootstraps, kfolds, Fit, model, data, grids, bounds, indices, au
 def multiprocess_bundle(Fit, model, data, grids, bounds, indices, auto_fit=True, verbose=1, Ns=None):
     
     # num voxels
-    num_voxels = np.int(np.shape(data)[0])
+    num_voxels = int(np.shape(data)[0])
     
     # expand out grids and bounds
     grids = [grids,]*num_voxels
