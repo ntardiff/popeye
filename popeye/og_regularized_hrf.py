@@ -89,10 +89,10 @@ class GaussianModel(PopulationModel):
         # offset
         model += p[1]
         
-        return model
+        
         
     # main method for deriving model time-series
-    def generate_prediction(self, x, y, sigma, beta, baseline, hrf_delay):
+    def generate_prediction(self, x, y, sigma, beta, baseline, hrf_delay, unscaled=False):
         
         r"""
         Predict signal for the Gaussian Model using the downsampled stimulus.
@@ -127,11 +127,18 @@ class GaussianModel(PopulationModel):
         # units
         model = (model-np.mean(model)) / np.mean(model)
         
-        # scale it by beta
-        model *= beta
         
-        # offset
-        model += baseline
+
+        # Added by Mrugank to just do a workaround doesn't do anything. (06/25/2024)
+        if unscaled:
+            return model
+        else:
+            # scale it by beta
+            model *= beta
+            
+            # offset
+            model += baseline
+            return model
         
         return model
     

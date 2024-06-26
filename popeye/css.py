@@ -68,7 +68,6 @@ class CompressiveSpatialSummationModel(PopulationModel):
         
         # convolve with the HRF
         hrf = self.hrf_model(self.hrf_delay, self.stimulus.tr_length)
-        
         # convolve it with the stimulus
         model = fftconvolve(response, hrf)[0:len(response)]
         

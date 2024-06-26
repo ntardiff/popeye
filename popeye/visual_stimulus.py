@@ -69,6 +69,7 @@ def generate_coordinate_matrices(pixels_across, pixels_down, ppd, scale_factor=1
     deg_y += 0.5/(ppd*scale_factor)
     
     return deg_x, np.flipud(deg_y)
+    # return deg_x, deg_y
 
 def resample_stimulus(stim_arr, scale_factor=0.05, mode='nearest',
                       order=0, dtype='uint8'):

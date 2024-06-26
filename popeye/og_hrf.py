@@ -98,8 +98,6 @@ class GaussianModel(PopulationModel):
         # offset
         model += p[1]
         
-        return model
-        
     # main method for deriving model time-series
     def generate_prediction(self, x, y, sigma, hrf_delay, beta, baseline, unscaled=False):
         
