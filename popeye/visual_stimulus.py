@@ -21,8 +21,12 @@ from popeye.base import StimulusModel
 import popeye.utilities as utils
 
 def pixels_per_degree(pixels_across, screen_width, viewing_distance):
-
+    # screen_width_cm = screen_width
+    # screen_width_deg = 2*np.degrees(np.arctan((screen_width_cm/2)/viewing_distance))
+    # ppd = pixels_across/screen_width_deg
+    # return ppd
     return np.pi*pixels_across/np.arctan(screen_width/viewing_distance/2.0)/360.0
+    # return 
     
 def generate_coordinate_matrices(pixels_across, pixels_down, ppd, scale_factor=1):
     
