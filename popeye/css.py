@@ -226,27 +226,27 @@ class CompressiveSpatialSummationFit(PopulationFit):
     
     @auto_attr
     def x(self):
-        return self.estimate[0]
+        return self.ballpark[0]
         
     @auto_attr
     def y(self):
-        return self.estimate[1]
+        return self.ballpark[1]
         
     @auto_attr
     def sigma(self):
-        return self.estimate[2]
+        return self.ballpark[2]
         
     @auto_attr
     def n(self):
-        return self.estimate[3]
+        return self.ballpark[3]
         
     @auto_attr
     def beta(self):
-        return self.estimate[4]
+        return self.ballpark[4]
     
     @auto_attr
     def baseline(self):
-        return self.estimate[5]
+        return self.ballpark[5]
         
     @auto_attr
     def rho(self):
@@ -259,3 +259,39 @@ class CompressiveSpatialSummationFit(PopulationFit):
     @auto_attr
     def sigma_size(self):
         return self.sigma / np.sqrt(self.n)
+    
+    # @auto_attr
+    # def x(self):
+    #     return self.estimate[0]
+        
+    # @auto_attr
+    # def y(self):
+    #     return self.estimate[1]
+        
+    # @auto_attr
+    # def sigma(self):
+    #     return self.estimate[2]
+        
+    # @auto_attr
+    # def n(self):
+    #     return self.estimate[3]
+        
+    # @auto_attr
+    # def beta(self):
+    #     return self.estimate[4]
+    
+    # @auto_attr
+    # def baseline(self):
+    #     return self.estimate[5]
+        
+    # @auto_attr
+    # def rho(self):
+    #     return np.sqrt(self.x**2+self.y**2)
+    
+    # @auto_attr
+    # def theta(self):
+    #     return np.mod(np.arctan2(self.y,self.x),2*np.pi)
+    
+    # @auto_attr
+    # def sigma_size(self):
+    #     return self.sigma / np.sqrt(self.n)

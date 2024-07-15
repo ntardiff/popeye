@@ -12,8 +12,8 @@ from scipy.stats import linregress
 import nibabel
 
 from popeye.onetime import auto_attr
-import popeye.utilities as utils
-from popeye.base import PopulationModel, PopulationFit
+import popeye.utilities_cclab as utils
+from popeye.base_cclab import PopulationModel, PopulationFit
 from popeye.spinach import generate_og_receptive_field, generate_rf_timeseries
 
 class GaussianModel(PopulationModel):
@@ -424,7 +424,7 @@ class CompressiveSpatialSummationFit(PopulationFit):
     """
     
     def __init__(self, model, data, grids, bounds,
-                 voxel_index=(1,2,3), Ns=None, auto_fit=True, verbose=0):
+                 voxel_index=(1,2,3), Ns=None, auto_fit=True, grid_only=False, verbose=0):
         
         
         r"""
@@ -487,7 +487,7 @@ class CompressiveSpatialSummationFit(PopulationFit):
         """
         
         PopulationFit.__init__(self, model, data, grids, bounds, 
-                               voxel_index, Ns, auto_fit, verbose)
+                               voxel_index, Ns, auto_fit, grid_only, verbose)
     
     @auto_attr
     def overloaded_estimate(self):
@@ -519,27 +519,45 @@ class CompressiveSpatialSummationFit(PopulationFit):
     
     @auto_attr
     def x(self):
-        return self.estimate[0]
+        if self.grid_only:
+            return self.ballpark[0]
+        else:
+            return self.estimate[0]
         
     @auto_attr
     def y(self):
-        return self.estimate[1]
+        if self.grid_only:
+            return self.ballpark[1]
+        else:
+            return self.estimate[1]
         
     @auto_attr
     def sigma(self):
-        return self.estimate[2]
+        if self.grid_only:
+            return self.ballpark[2]
+        else:
+            return self.estimate[2]
         
     @auto_attr
     def n(self):
-        return self.estimate[3]
+        if self.grid_only:
+            return self.ballpark[3]
+        else:
+            return self.estimate[3]
         
     @auto_attr
     def beta(self):
-        return self.estimate[4]
+        if self.grid_only:
+            return self.ballpark[4]
+        else:
+            return self.estimate[4]
     
     @auto_attr
     def baseline(self):
-        return self.estimate[5]
+        if self.grid_only:
+            return self.ballpark[5]
+        else:
+            return self.estimate[5]
         
     @auto_attr
     def rho(self):
