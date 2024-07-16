@@ -429,7 +429,7 @@ def gradient_descent_search(data, error_function, objective_function, parameters
 def stacker(x,y):
     return np.hstack((x,y))
 
-@numba.jit(nopython=False, parallel=False)
+@numba.jit(nopython=True, parallel=False)
 def rss(data,prediction):
     return np.nansum((data-prediction)**2)
 
@@ -533,7 +533,7 @@ def brute_force_search(data, error_function, objective_function, grids, Ns=None,
         output = brute(error_function_rss,
                        args=(data, objective_function, verbose),
                        ranges=grids,
-                       finish=fmin,
+                       finish=None,
                        full_output=True,
                        disp=False)
 
@@ -543,7 +543,7 @@ def brute_force_search(data, error_function, objective_function, grids, Ns=None,
                args=(data, objective_function, verbose),
                ranges=grids,
                Ns=Ns,
-               finish=fmin,
+               finish=None,
                full_output=True,
                disp=False)
     return output

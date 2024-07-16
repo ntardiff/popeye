@@ -14,7 +14,7 @@ import nibabel
 from popeye.onetime import auto_attr
 import popeye.utilities_cclab as utils
 from popeye.base_cclab import PopulationModel, PopulationFit
-from popeye.spinach import generate_og_receptive_field, generate_rf_timeseries
+from popeye.spinach import generate_og_receptive_field, generate_rf_timeseries, generate_rf_timeseries_nomask
 
 class GaussianModel(PopulationModel):
     
@@ -570,3 +570,4 @@ class CompressiveSpatialSummationFit(PopulationFit):
     @auto_attr
     def sigma_size(self):
         return self.sigma / np.sqrt(self.n)
+    
