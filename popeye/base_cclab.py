@@ -396,6 +396,14 @@ class PopulationFit(object):
         return np.corrcoef(self.data, self.prediction)[1][0]**2
     
     @auto_attr
+    def rsquared_adj(self):
+        return 1 - (1-self.rsquared)*(len(self.data)-1)/(len(self.data)-len(self.estimate)-1)
+    
+    @auto_attr
+    def rsquared0(self):
+        return np.corrcoef(self.data, self.scaled_ballpark_prediction)[1][0]**2
+    
+    @auto_attr
     def rss(self):
         return np.sum((self.data - self.prediction)**2)
     

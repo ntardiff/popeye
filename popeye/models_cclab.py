@@ -518,6 +518,14 @@ class CompressiveSpatialSummationFit(PopulationFit):
         return self.ballpark[5]
     
     @auto_attr
+    def rho0(self):
+        return np.sqrt(self.x0**2+self.y0**2)
+    
+    @auto_attr
+    def theta0(self):
+        return np.mod(np.arctan2(self.y0,self.x0),2*np.pi)
+    
+    @auto_attr
     def x(self):
         if self.grid_only:
             return self.ballpark[0]
