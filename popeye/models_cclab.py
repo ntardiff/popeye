@@ -316,7 +316,7 @@ class CompressiveSpatialSummationModel(PopulationModel):
     
     """
     
-    def __init__(self, stimulus, hrf_model, cached_model_path=None, nuisance=None):
+    def __init__(self, stimulus, hrf_model, normalizer=utils.percent_change, cached_model_path=None, nuisance=None):
         
         r"""
         A Compressive Spatial Summation population receptive field model [1]_.
@@ -340,7 +340,7 @@ class CompressiveSpatialSummationModel(PopulationModel):
         
         """
         
-        PopulationModel.__init__(self, stimulus, hrf_model, cached_model_path, nuisance)
+        PopulationModel.__init__(self, stimulus, hrf_model, normalizer, cached_model_path, nuisance)
         
     # main method for deriving model time-series
     def generate_ballpark_prediction(self, x, y, sigma, n):
@@ -524,6 +524,7 @@ class CompressiveSpatialSummationFit(PopulationFit):
     @auto_attr
     def theta0(self):
         return np.mod(np.arctan2(self.y0,self.x0),2*np.pi)
+    
     
     @auto_attr
     def x(self):
