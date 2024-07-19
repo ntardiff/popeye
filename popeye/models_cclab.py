@@ -525,7 +525,6 @@ class CompressiveSpatialSummationFit(PopulationFit):
     def theta0(self):
         return np.mod(np.arctan2(self.y0,self.x0),2*np.pi)
     
-    
     @auto_attr
     def x(self):
         if self.grid_only:
