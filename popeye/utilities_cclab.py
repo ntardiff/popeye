@@ -548,26 +548,6 @@ def brute_force_search(data, error_function, objective_function, grids, Ns=None,
                disp=False)
     return output
 
-    # # if user provides their own grids
-    # if isinstance(grids[0], SliceType):
-    #     output = brute(error_function_rss,
-    #                 args=(data, objective_function, verbose),
-    #                 ranges=grids,
-    #                 finish=None,
-    #                 full_output=True,
-    #                 disp=False)
-
-    # # otherwise specify (min,max) and Ns for each dimension
-    # else:
-    #     output = brute(error_function_rss,
-    #         args=(data, objective_function, verbose),
-    #         ranges=grids,
-    #         Ns=Ns,
-    #         finish=None,
-    #         full_output=True,
-    #         disp=False)
-    # return output
-
 # generic error function
 def error_function(parameters, bounds, data, objective_function, verbose):
 

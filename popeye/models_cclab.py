@@ -365,7 +365,10 @@ class CompressiveSpatialSummationModel(PopulationModel):
         model = fftconvolve(response, hrf)[0:len(response)]
         
         # units
-        model = (model - np.mean(model)) / np.mean(model)
+        model = self.normalizer(model)
+
+        # units
+        #model = (model - np.mean(model)) / np.mean(model)
         
         # regress out mean and linear
         p = linregress(model, self.data)
@@ -401,8 +404,11 @@ class CompressiveSpatialSummationModel(PopulationModel):
         # convolve it with the stimulus
         model = fftconvolve(response, hrf)[0:len(response)]
         
+        # units
+        model = self.normalizer(model)
+        
         # convert units
-        model = (model - np.mean(model)) / np.mean(model)
+        #model = (model - np.mean(model)) / np.mean(model)
         
         if unscaled:
             return model
