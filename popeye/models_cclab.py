@@ -360,9 +360,10 @@ class CompressiveSpatialSummationModel(PopulationModel):
         response **= n
         
         # convolve with the HRF
-        hrf = self.hrf_model(self.hrf_delay, self.stimulus.tr_length)
-        # convolve it with the stimulus
-        model = fftconvolve(response, hrf)[0:len(response)]
+        # hrf = self.hrf_model(self.hrf_delay, self.stimulus.tr_length)
+        # # convolve it with the stimulus
+        # model = fftconvolve(response, hrf)[0:len(response)]
+        model = fftconvolve(response, self.hrf())[0:len(response)]
         
         # units
         # model = self.normalizer(model)
@@ -399,10 +400,11 @@ class CompressiveSpatialSummationModel(PopulationModel):
         response **= n
         
         # convolve with the HRF
-        hrf = self.hrf_model(self.hrf_delay, self.stimulus.tr_length)
+        # hrf = self.hrf_model(self.hrf_delay, self.stimulus.tr_length)
         
-        # convolve it with the stimulus
-        model = fftconvolve(response, hrf)[0:len(response)]
+        # # convolve it with the stimulus
+        # model = fftconvolve(response, hrf)[0:len(response)]
+        model = fftconvolve(response, self.hrf())[0:len(response)]
         
         # units
         # model = self.normalizer(model)
