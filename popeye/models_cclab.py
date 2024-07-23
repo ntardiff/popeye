@@ -343,9 +343,9 @@ class CompressiveSpatialSummationModel(PopulationModel):
         PopulationModel.__init__(self, stimulus, hrf_model, normalizer, cached_model_path, nuisance)
         
     # main method for deriving model time-series
-    def generate_ballpark_prediction(self, x, y, sigma, n):
+    def generate_ballpark_prediction(self, x, y, sigma, n, unscaled=False):
         
-        mask = self.distance_mask_coarse(x, y, sigma)
+        # mask = self.distance_mask_coarse(x, y, sigma)
 
         # generate the RF
         rf = generate_og_receptive_field(x, y, sigma,self.stimulus.deg_x0, self.stimulus.deg_y0)
@@ -354,7 +354,8 @@ class CompressiveSpatialSummationModel(PopulationModel):
         rf /= ((2 * np.pi * sigma**2) * 1/np.diff(self.stimulus.deg_x0[0,0:2])**2)
         
         # extract the stimulus time-series
-        response = generate_rf_timeseries(self.stimulus.stim_arr0, rf, mask)
+        # response = generate_rf_timeseries(self.stimulus.stim_arr0, rf, mask)
+        response = generate_rf_timeseries_nomask(self.stimulus.stim_arr0, rf)
         
         # compression
         response **= n
@@ -370,22 +371,25 @@ class CompressiveSpatialSummationModel(PopulationModel):
 
         # units
         model = (model - np.mean(model)) / np.mean(model)
-        
-        # regress out mean and linear
-        p = linregress(model, self.data)
-        
-        # scale
-        model *= p[0]
-        
-        # offset
-        model += p[1]
-        
-        return model
+
+        if unscaled:
+            return model
+        else:
+            # regress out mean and linear
+            p = linregress(model, self.data)
+            
+            # scale
+            model *= p[0]
+            
+            # offset
+            model += p[1]
+            
+            return model
         
     # main method for deriving model time-series
     def generate_prediction(self, x, y, sigma, n, beta, baseline, unscaled=False):
         
-        mask = self.distance_mask(x, y, sigma)
+        # mask = self.distance_mask(x, y, sigma)
 
         # generate the RF
         rf = generate_og_receptive_field(x, y, sigma, self.stimulus.deg_x, self.stimulus.deg_y)
@@ -394,7 +398,8 @@ class CompressiveSpatialSummationModel(PopulationModel):
         rf /= ((2 * np.pi * sigma**2) * 1/np.diff(self.stimulus.deg_x[0,0:2])**2)
         
         # extract the stimulus time-series
-        response = generate_rf_timeseries(self.stimulus.stim_arr, rf, mask)
+        # response = generate_rf_timeseries(self.stimulus.stim_arr, rf, mask)
+        response = generate_rf_timeseries_nomask(self.stimulus.stim_arr, rf)
         
         # compression
         response **= n
