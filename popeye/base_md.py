@@ -14,6 +14,7 @@ import numpy as np
 import numexpr as ne
 from scipy.optimize import NonlinearConstraint
 from inspect import signature
+from scipy.signal import detrend
 
 try:  # pragma: no cover
     from types import SliceType
@@ -87,7 +88,16 @@ class PopulationModel(object):
         # set up cached model if specified
         if self.cached_model_path is not None: # pragma: no cover
             self.resurrect_cached_model
-        
+
+    def remove_trend(signal, method='all'):
+        if method == 'demean':
+            return (signal - np.mean(signal, axis=-1)[..., None]) / np.mean(signal, axis=-1)[..., None]
+        elif method == 'pct_signal_change':
+            signal_mean = np.mean(signal, axis=-1)[..., None]
+            signal_detrend = detrend(signal, axis=-1, type='linear') + signal_mean
+            signal_pct = utils.percent_change(signal_detrend, ax=-1)
+            return signal_pct
+            
     def generate_ballpark_prediction(self): # pragma: no cover
         raise NotImplementedError("Each pRF model must implement its own ballpark prediction!") 
     
@@ -240,6 +250,9 @@ class PopulationFit(object):
         self.data = data
         self.nuisance = nuisance
         self.verbose, self.very_verbose = set_verbose(verbose)
+
+        # Remove trend from the data
+
         
         assert fit_method in ['2step','grid_only','global_opt'], \
             'Invalid fit method: must be one of "2step", "grid_only" "global_opt"'

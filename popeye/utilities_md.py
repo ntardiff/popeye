@@ -114,17 +114,6 @@ def print_time(st_time, end_time, process_name):
     elif duration < 3600:
         print(f'{process_name} took {round(duration/60, 2)} minutes ({round(duration//60, 2)} seconds)')
 
-def remove_trend(signal, method='all'):
-    if method == 'demean':
-         return (signal - np.mean(signal, axis=-1)[..., None]) / np.mean(signal, axis=-1)[..., None]
-    elif method == 'prct_signal_change':
-        return percent_change(signal, ax=-1)
-    elif method == 'all':
-        signal_mean = np.mean(signal, axis=-1)[..., None]
-        signal_detrend = detrend(signal, axis=-1, type='linear') + signal_mean
-        signal_pct = percent_change(signal_detrend, ax=-1)
-        return signal_pct
-
 def constraint_grids(grid_space_orig, stimulus):
     print(f'Number of grid points: {len(grid_space_orig)}')
     idxs_to_drop = []
