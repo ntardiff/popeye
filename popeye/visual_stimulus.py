@@ -435,6 +435,10 @@ class VisualStimulus(StimulusModel):
         self.run_length = self.stim_arr.shape[2]
         self.ppd = pixels_per_degree(self.pixels_across, self.screen_width, self.viewing_distance)
         
+        #we also want screen width in dva for computing constraints on fits
+        self.screen_dva = self.pixels_across/self.ppd #np.rad2deg(np.arctan((self.screen_width/2)/self.viewing_distance)*2) 
+
+        
         # generate coordinate matrices
         deg_x, deg_y = generate_coordinate_matrices(self.pixels_across, self.pixels_down, self.ppd)
         

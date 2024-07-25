@@ -14,7 +14,8 @@ import datetime
 import numpy as np
 import nibabel
 from scipy.stats import gamma
-from scipy.optimize import brute, fmin_powell, fmin, least_squares, minimize
+from scipy.signal import detrend
+from scipy.optimize import brute, fmin_powell, fmin, least_squares, minimize, differential_evolution
 # from scipy.stats import linregress
 from scipy.integrate import romb, trapz
 # from scipy import c_, ones, dot, stats, diff
@@ -39,6 +40,10 @@ try: # pragma: no cover
     xrange
 except NameError:  # pragma: no cover
     xrange = range
+    
+import multiprocessing as mp
+if mp.get_start_method() != 'fork':
+    mp.set_start_method('fork',force=True)
 
 
 def regularizing_error_function(parameter, bundle, p_bounds, thr=0.10): # pragma: no cover
@@ -355,7 +360,7 @@ def normalize(array, imin=-1, imax=1, axis=-1):
 
 
 # generic gradient descent
-def gradient_descent_search(data, error_function, objective_function, parameters, bounds, verbose):
+def gradient_descent_search(data, error_function, objective_function, parameters, bounds, verbose,**kwargs):
 
     r"""A generic gradient-descent error minimization function.
 
@@ -420,8 +425,23 @@ def gradient_descent_search(data, error_function, objective_function, parameters
     # else:
     #     output = least_squares(error_function_residual, parameters, bounds=bounds,
     #                            args=(data, objective_function, verbose))
-    output = minimize(error_function_rss, parameters, bounds=bounds, method='SLSQP',
-                      args=(data, objective_function, verbose))
+    output = minimize(error_function_rss, parameters, bounds=bounds, method='SLSQP', #method='COBYLA',
+                      args=(data, objective_function, verbose),**kwargs)
+
+    return output
+
+
+def global_search(data, error_function, objective_function, bounds, verbose,**kwargs):
+
+    
+    #minimize accepts None/inf as a bound, but differential evolution doesn't
+    bounds = np.array(bounds)
+    bounds[bounds[:,0]==None,0] = -100
+    bounds[bounds[:,1]==None,1] = 100
+    bounds = tuple(map(tuple,bounds)) #back to tuple...maybe not required    
+
+    output = differential_evolution(error_function_rss, bounds=bounds, 
+                      args=(data, objective_function, verbose),**kwargs)
 
     return output
 
@@ -711,6 +731,13 @@ def percent_change(ts, ax=-1):
     ts = np.asarray(ts)
 
     return (ts / np.expand_dims(np.mean(ts, ax), ax) - 1) * 100
+
+
+def detrend_psc(ts,ax=-1):
+    ts_mean = np.mean(ts, axis=ax)[..., None]
+    ts_detrend = detrend(ts, axis=ax, type='linear') + ts_mean
+    ts_pct = percent_change(ts_detrend, ax=-1)
+    return ts_pct
 
 
 def zscore(time_series, axis=-1):
@@ -1031,6 +1058,42 @@ def cartes_to_polar(cartes):
     polar[...,0] = np.mod(np.arctan2(cartes[...,1], cartes[...,0]),2*np.pi)
     polar[...,1] = np.sqrt(cartes[...,0]**2 + cartes[...,1]**2)
     return polar
+
+def cart2pol(x, y):
+    rho = np.sqrt(x**2 + y**2)
+    phi = np.arctan2(y, x)
+    return(rho, phi)
+
+def pol2cart(rho, phi):
+    x = rho * np.cos(phi)
+    y = rho * np.sin(phi)
+    return(x, y)
+
+# def generate_polar_grid(screen_dva,N,sigma_min=0.1,n_min=0.1,n_max=1.25):
+#     """
+    
+
+#     Parameters
+#     ----------
+#     bounds : array
+#         Bounds on rf parameters [(X),(Y),(sigma),(n)].
+
+#     Returns
+#     -------
+#     Array of gridpoints.
+
+#     """
+    
+#     #first generate x,y grids
+#     xy_basegrid = np.exp(np.linspace(0,np.log(screen_dva),N//2))
+#     xy_grid = np.concatenate((np.append(-np.flip(xy_basegrid),0.0),xy_basegrid))
+    
+#     Nnew = len(xy_grid)
+    
+#     sigma_grid = np.exp(np.linspace(np.log(sigma_min),np.log(screen_dva/2),Nnew))
+
+    
+    
 
 
 def find_files(directory, pattern):
