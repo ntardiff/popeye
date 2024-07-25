@@ -12,8 +12,8 @@ from scipy.stats import linregress
 import nibabel
 
 from popeye.onetime import auto_attr
-import popeye.utilities_cclab as utils
-from popeye.base_cclab import PopulationModel, PopulationFit
+import popeye.utilities_md as utils
+from popeye.base_md import PopulationModel, PopulationFit
 from popeye.spinach import generate_og_receptive_field, generate_rf_timeseries, generate_rf_timeseries_nomask
 
 def set_verbose(verbose):
@@ -74,12 +74,7 @@ class CompressiveSpatialSummationModel(object):
         
         """
         
-        # PopulationModel.__init__(self, stimulus, hrf_model, normalizer, cached_model_path, nuisance)
-        self.stimulus = stimulus
-        self.hrf_model = hrf_model
-        self.normalizer = normalizer
-        self.cached_model_path = cached_model_path
-        self.nuisance = nuisance
+        PopulationModel.__init__(self, stimulus, hrf_model, normalizer, cached_model_path, nuisance)
 
     # Generate grid-fit time-series
     def generate_grid_prediction(self, x, y, sigma, n):
@@ -256,28 +251,9 @@ class CompressiveSpatialSummationFit(PopulationFit):
         
         """
         
-        # absorb vars
-        self.grids = grids
-        self.bounds = bounds
-        self.Ns = Ns
-        self.voxel_index = voxel_index
-        self.auto_fit = auto_fit
-        self.grid_only = grid_only
-        self.model = model
-        self.data = data
-        self.verbose, self.very_verbose = set_verbose(verbose)
-        
-        # regress out any nuisance
-        if self.model.nuisance is not None: # pragma: no cover
-            self.model.nuisance_model = sm.OLS(self.data,self.model.nuisance)
-            self.model.results = self.model.nuisance_model.fit()
-            self.original_data = self.data
-            self.data = self.model.results.resid
-
-        (x_grid, y_grid, s_grid, n_grid) = self.grids
-        
-        
-    
+        PopulationFit.__init__(self, model, data, grids, bounds, 
+                               voxel_index, Ns, auto_fit, verbose)
+            
     @auto_attr
     def overloaded_estimate(self):
         return [self.theta, self.rho, self.sigma_size, self.n, self.beta, self.baseline]
