@@ -8,10 +8,12 @@ from popeye.onetime import auto_attr
 import time, ctypes, itertools
 import pickle
 import sharedmem
-from scipy.stats import linregress
+from scipy.stats import linregress, zscore
 import popeye.utilities_cclab as utils
 import numpy as np
 import numexpr as ne
+from scipy.optimize import NonlinearConstraint
+from inspect import signature
 
 try:  # pragma: no cover
     from types import SliceType
@@ -49,7 +51,8 @@ class PopulationModel(object):
     
     r""" Base class for all pRF models."""
     
-    def __init__(self, stimulus, hrf_model, normalizer=utils.percent_change, cached_model_path=None, nuisance=None):
+    def __init__(self, stimulus, hrf_model, normalizer=zscore, cached_model_path=None, 
+                 ): #nuisance=None):
         
         r"""Base class for all pRF models.
         
@@ -78,7 +81,7 @@ class PopulationModel(object):
         self.stimulus = stimulus
         self.hrf_model = hrf_model
         self.normalizer = normalizer
-        self.nuisance = nuisance
+        #self.nuisance = nuisance
         self.cached_model_path = cached_model_path
         
         # set up cached model if specified
@@ -101,9 +104,11 @@ class PopulationModel(object):
     def distance_mask_coarse(self, x, y, sigma):
         
         if hasattr(self, 'mask_size'): # pragma: no cover
-            distance = (self.stimulus.deg_x0 - x)**2 + (self.stimulus.deg_y0 - y)**2
+            #distance = (self.stimulus.deg_x0 - x)**2 + (self.stimulus.deg_y0 - y)**2
+            distance = np.sqrt((self.stimulus.deg_x0 - x)**2 + (self.stimulus.deg_y0 - y)**2)
             mask = np.zeros_like(distance, dtype='uint8')
-            mask[distance < self.mask_size*sigma**2] = 1
+            #mask[distance < self.mask_size*sigma**2] = 1
+            mask[distance < self.mask_size*sigma] = 1
         else: # pragma: no cover
             mask = np.ones_like(self.stimulus.deg_x0, dtype='uint8')
             
@@ -112,9 +117,11 @@ class PopulationModel(object):
     def distance_mask(self, x, y, sigma):
         
         if hasattr(self, 'mask_size'): # pragma: no cover
-            distance = (self.stimulus.deg_x - x)**2 + (self.stimulus.deg_y - y)**2
+            #distance = (self.stimulus.deg_x - x)**2 + (self.stimulus.deg_y - y)**2
+            distance = np.sqrt((self.stimulus.deg_x - x)**2 + (self.stimulus.deg_y - y)**2)
             mask = np.zeros_like(distance, dtype='uint8')
-            mask[distance < self.mask_size*sigma**2] = 1
+            #mask[distance < self.mask_size*sigma**2] = 1
+            mask[distance < self.mask_size*sigma] = 1
         else: # pragma: no cover
             mask = np.ones_like(self.stimulus.deg_x, dtype='uint8')
             
@@ -183,7 +190,8 @@ class PopulationFit(object):
     
     
     def __init__(self, model, data, grids, bounds, 
-                 voxel_index=(1,2,3), Ns=None, auto_fit=True, grid_only=False, verbose=False):
+                 voxel_index=(1,2,3), Ns=None, auto_fit=True, grid_only=False,
+                 fit_method = '2step', outer_limit=2, nuisance=utils.detrend_psc, verbose=False):
         
         r"""A class containing tools for fitting pRF models.
         
@@ -236,6 +244,10 @@ class PopulationFit(object):
         auto_fit : bool
             A flag for automatically running the fitting procedures once the 
             `GaussianFit` object is instantiated.
+            
+        outer_limit : float
+            Used to constrain prf positions such they cannot be more than 
+            outer_limit*sigma away from the outer edge of the stimulus display
         
         verbose : int
             0 = silent
@@ -250,17 +262,40 @@ class PopulationFit(object):
         self.Ns = Ns
         self.voxel_index = voxel_index
         self.auto_fit = auto_fit
-        self.grid_only = grid_only
+        self.grid_only = grid_only #leaving this flag in for backward compatibility
+        self.outer_limit = outer_limit
         self.model = model
         self.data = data
+        self.nuisance = nuisance
         self.verbose, self.very_verbose = set_verbose(verbose)
         
-        # regress out any nuisance
-        if self.model.nuisance is not None: # pragma: no cover
-            self.model.nuisance_model = sm.OLS(self.data,self.model.nuisance)
-            self.model.results = self.model.nuisance_model.fit()
-            self.original_data = self.data
-            self.data = self.model.results.resid
+        assert fit_method in ['2step','grid_only','global_opt'], \
+            'Invalid fit method: must be one of "2step", "grid_only" "global_opt"'
+        
+        #override fit_method if grid_onlny specified    
+        self.fit_method = 'grid_only' if self.grid_only else fit_method
+       
+        
+        #We're fitting x,y positions, but we want to fit in a circular region to
+        #avoid numerical issues, among other reasons, so set constraints to be used
+        #by solvers
+        self.constraints = (
+                NonlinearConstraint(lambda x: np.sqrt(x[0]**2 + x[1]**2), 
+                                    -np.inf, self.model.stimulus.screen_dva),
+                NonlinearConstraint(lambda x: np.sqrt(x[0]**2 + x[1]**2) - self.outer_limit*x[2], 
+                                    -np.inf, self.model.stimulus.screen_dva/2)
+            )
+        
+        
+        # regress out any 
+        if self.nuisance is not None:
+            self.data = self.nuisance(self.data)
+            
+        # if self.model.nuisance is not None: # pragma: no cover
+            # self.model.nuisance_model = sm.OLS(self.data,self.model.nuisance)
+            # self.model.results = self.model.nuisance_model.fit()
+            # self.original_data = self.data
+            # self.data = self.model.results.resid
         
         # push data down to model
         # there is probably a better way of exposing the data
@@ -282,8 +317,10 @@ class PopulationFit(object):
             self.start = time.time()
             
             # fit
-            self.ballpark
-            if not grid_only:
+            
+            if fit_method != 'global_opt':
+                self.ballpark
+            if fit_method != 'grid_only':
                 self.estimate
                 self.overloaded_estimate
             
@@ -291,14 +328,15 @@ class PopulationFit(object):
             self.finish = time.time()
             
             # performance
-            if not grid_only:
+            if fit_method != 'grid_only':
                 self.rss
                 self.rsquared
             
-            # flush if not testing
+            # flush if not testing (do we need this???)
             if not hasattr(self.model, 'store_search_space'): # pragma: no cover
                 self.gradient_descent = [None]*6
                 self.brute_force = [None,]*4
+                self.global_opt = [None,]*6 #needed???
             
             # print
             if self.verbose: # pragma: no cover
@@ -325,24 +363,50 @@ class PopulationFit(object):
     
     @auto_attr
     def ballpark(self):
-        if self.model.cached_model_path is not None: # pragma: no cover
-            return self.best_cached_model_parameters
+        if self.fit_method=='global_opt':
+            #this is hacky but fine for now as a way of getting the number of parameters in the model
+            #better this than add conditionals everywhere...
+            model_n = len(signature(self.model.generate_ballpark_prediction).parameters) + 2
+            return np.tile(None,model_n)    
+        
         else:
-            return np.append(self.brute_force[0],(self.slope,self.intercept))
-    
+            if self.model.cached_model_path is not None: # pragma: no cover
+                return self.best_cached_model_parameters
+            else:
+                return np.append(self.brute_force[0],(self.slope,self.intercept))
+            
+            
     # the gradient search
     @auto_attr
     def gradient_descent(self):
         
         if self.very_verbose: # pragma: no cover
             print('The gridfit solution was %s, starting gradient descent ...' %(self.ballpark))
-        
+         
         return utils.gradient_descent_search(self.data,
-                                             utils.error_function,
-                                             self.model.generate_prediction,
-                                             self.ballpark,
-                                             self.bounds,
-                                             self.very_verbose)
+                                              utils.error_function,
+                                              self.model.generate_prediction,
+                                              self.ballpark,
+                                              self.bounds,
+                                              self.very_verbose,
+                                              constraints=self.constraints)
+    
+    
+    # the global optimization
+    @auto_attr
+    def global_opt(self,popsize=8,workers=-1,**kwargs):
+        
+
+        return utils.global_search(self.data,
+                                              utils.error_function,
+                                              self.model.generate_prediction,
+                                              self.bounds,
+                                              self.very_verbose,
+                                              constraints=self.constraints,
+                                              popsize=popsize,workers=workers,**kwargs)
+        
+    
+    
     @auto_attr
     def overloaded_estimate(self): # pragma: no cover
         
@@ -366,7 +430,7 @@ class PopulationFit(object):
         
         """
         
-        return self.gradient_descent.x
+        return self.global_opt.x if self.fit_method=='global_opt' else self.gradient_descent.x
     
     @auto_attr
     def ballpark_prediction(self):
@@ -386,14 +450,28 @@ class PopulationFit(object):
     
     @auto_attr
     def prediction(self):
-        if self.grid_only:
+        if self.fit_method=='grid_only':
             return self.model.generate_prediction(*self.ballpark)
         else:
             return self.model.generate_prediction(*self.estimate)
     
+    # @auto_attr
+    # def rsquared(self):
+    #     return np.corrcoef(self.data, self.prediction)[1][0]**2
+    
     @auto_attr
     def rsquared(self):
-        return np.corrcoef(self.data, self.prediction)[1][0]**2
+        #consider caching the rawrss after normalizing?
+        r2 = 1 - (self.rss / np.sum((self.data - self.data.mean())**2))
+
+        #clean up [adapted from vista rmGet.m]
+        if np.isinf(r2) | np.isnan(r2):
+            return 0
+        
+        r2 = np.maximum(r2, 0)
+        r2 = np.minimum(r2, 1)
+        
+        return r2
     
     @auto_attr
     def rsquared_adj(self):
@@ -401,7 +479,7 @@ class PopulationFit(object):
     
     @auto_attr
     def rsquared0(self):
-        return np.corrcoef(self.data, self.scaled_ballpark_prediction)[1][0]**2
+        return np.corrcoef(self.data, self.scaled_ballpark_prediction)[1][0]**2 if self.fit_method!='global_opt' else None
     
     @auto_attr
     def rss(self):

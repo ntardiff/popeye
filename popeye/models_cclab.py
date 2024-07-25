@@ -8,7 +8,7 @@ warnings.simplefilter("ignore")
 
 import numpy as np
 from scipy.signal import fftconvolve
-from scipy.stats import linregress
+from scipy.stats import linregress,zscore
 import nibabel
 
 from popeye.onetime import auto_attr
@@ -18,7 +18,7 @@ from popeye.spinach import generate_og_receptive_field, generate_rf_timeseries, 
 
 class GaussianModel(PopulationModel):
     
-    def __init__(self, stimulus, hrf_model, normalizer=utils.percent_change, cached_model_path=None, nuisance=None):
+    def __init__(self, *args, **kwargs): #stimulus, hrf_model, normalizer=utils.percent_change, cached_model_path=None, nuisance=None):
         
         r"""A 2D Gaussian population receptive field model [1]_.
         
@@ -42,7 +42,7 @@ class GaussianModel(PopulationModel):
         
         """
         
-        PopulationModel.__init__(self, stimulus, hrf_model, normalizer)
+        PopulationModel.__init__(self, *args, **kwargs) #stimulus, hrf_model, normalizer)
         
     # main method for deriving model time-series
     def generate_ballpark_prediction(self, x, y, sigma):
@@ -174,8 +174,8 @@ class GaussianFit(PopulationFit):
     
     """
     
-    def __init__(self, model, data, grids, bounds,
-                 voxel_index=(1,2,3), Ns=None, auto_fit=True, verbose=0):
+    def __init__(self, *args, **kwargs): #model, data, grids, bounds,
+                 #voxel_index=(1,2,3), Ns=None, auto_fit=True, verbose=0):
         
         r"""
         A class containing tools for fitting the 2D Gaussian pRF model.
@@ -239,8 +239,8 @@ class GaussianFit(PopulationFit):
             
         """
         
-        PopulationFit.__init__(self, model, data, grids, bounds, 
-                           voxel_index, Ns, auto_fit, verbose)
+        PopulationFit.__init__(self, *args, **kwargs) #model, data, grids, bounds, 
+                           #voxel_index, Ns, auto_fit, verbose)
                            
     @auto_attr
     def overloaded_estimate(self):
@@ -316,7 +316,8 @@ class CompressiveSpatialSummationModel(PopulationModel):
     
     """
     
-    def __init__(self, stimulus, hrf_model, normalizer=utils.percent_change, cached_model_path=None, nuisance=None):
+    def __init__(self, *args, **kwargs): #stimulus, hrf_model, normalizer=utils.percent_change, cached_model_path=None, 
+                 #nuisance=None):
         
         r"""
         A Compressive Spatial Summation population receptive field model [1]_.
@@ -340,7 +341,7 @@ class CompressiveSpatialSummationModel(PopulationModel):
         
         """
         
-        PopulationModel.__init__(self, stimulus, hrf_model, normalizer, cached_model_path, nuisance)
+        PopulationModel.__init__(self, *args, **kwargs) #stimulus, hrf_model, normalizer, cached_model_path, nuisance)
         
     # main method for deriving model time-series
     def generate_ballpark_prediction(self, x, y, sigma, n):
@@ -350,8 +351,8 @@ class CompressiveSpatialSummationModel(PopulationModel):
         # generate the RF
         rf = generate_og_receptive_field(x, y, sigma,self.stimulus.deg_x0, self.stimulus.deg_y0)
         
-        # normalize by the integral
-        rf /= ((2 * np.pi * sigma**2) * 1/np.diff(self.stimulus.deg_x0[0,0:2])**2)
+        # normalize by the integral (this is not necessary if normalizing below)
+        #rf /= ((2 * np.pi * sigma**2) * 1/np.diff(self.stimulus.deg_x0[0,0:2])**2)
         
         # extract the stimulus time-series
         response = generate_rf_timeseries(self.stimulus.stim_arr0, rf, mask)
@@ -366,10 +367,10 @@ class CompressiveSpatialSummationModel(PopulationModel):
         model = fftconvolve(response, self.hrf())[0:len(response)]
         
         # units
-        # model = self.normalizer(model)
+        model = self.normalizer(model)
 
         # units
-        model = (model - np.mean(model)) / np.mean(model)
+        #model = zscore(model) #(model - np.mean(model)) / np.mean(model)
         
         # regress out mean and linear
         p = linregress(model, self.data)
@@ -390,8 +391,8 @@ class CompressiveSpatialSummationModel(PopulationModel):
         # generate the RF
         rf = generate_og_receptive_field(x, y, sigma, self.stimulus.deg_x, self.stimulus.deg_y)
         
-        # normalize by the integral
-        rf /= ((2 * np.pi * sigma**2) * 1/np.diff(self.stimulus.deg_x[0,0:2])**2)
+        # normalize by the integral (this is not necessary if normalizing below)
+        #rf /= ((2 * np.pi * sigma**2) * 1/np.diff(self.stimulus.deg_x[0,0:2])**2)
         
         # extract the stimulus time-series
         response = generate_rf_timeseries(self.stimulus.stim_arr, rf, mask)
@@ -407,10 +408,10 @@ class CompressiveSpatialSummationModel(PopulationModel):
         model = fftconvolve(response, self.hrf())[0:len(response)]
         
         # units
-        # model = self.normalizer(model)
+        model = self.normalizer(model)
         
         # convert units
-        model = (model - np.mean(model)) / np.mean(model)
+        #model = zscore(model) #(model - np.mean(model)) / np.mean(model)
         
         if unscaled:
             return model
@@ -431,8 +432,8 @@ class CompressiveSpatialSummationFit(PopulationFit):
     
     """
     
-    def __init__(self, model, data, grids, bounds,
-                 voxel_index=(1,2,3), Ns=None, auto_fit=True, grid_only=False, verbose=0):
+    def __init__(self, model, data, grids, bounds=None, *args, **kwargs):
+                 #voxel_index=(1,2,3), Ns=None, auto_fit=True, grid_only=False, verbose=0):
         
         
         r"""
@@ -494,8 +495,20 @@ class CompressiveSpatialSummationFit(PopulationFit):
         
         """
         
+        #if user doesn't supply bounds for optimization, let's generate some that seem reasonable
+        #probably should allow some of these values to be set as defaults at some piont...
+        if bounds is None:
+            x_bounds = (-model.stimulus.screen_dva, model.stimulus.screen_dva)
+            y_bounds = (-model.stimulus.screen_dva, model.stimulus.screen_dva)
+            s_bounds = (0.5/model.stimulus.ppd, model.stimulus.screen_dva/2)
+            n_bounds = (0.01, 1.25)
+            b_bounds = (1e-8, None)
+            m_bounds = (None, None)
+            bounds = (x_bounds, y_bounds, s_bounds, n_bounds, b_bounds, m_bounds)
+
+        
         PopulationFit.__init__(self, model, data, grids, bounds, 
-                               voxel_index, Ns, auto_fit, grid_only, verbose)
+                               *args, **kwargs) #voxel_index, Ns, auto_fit, grid_only, verbose)
     
     @auto_attr
     def overloaded_estimate(self):
@@ -527,50 +540,50 @@ class CompressiveSpatialSummationFit(PopulationFit):
     
     @auto_attr
     def rho0(self):
-        return np.sqrt(self.x0**2+self.y0**2)
+        return np.sqrt(self.x0**2+self.y0**2) if self.fit_method!='global_opt' else None
     
     @auto_attr
     def theta0(self):
-        return np.mod(np.arctan2(self.y0,self.x0),2*np.pi)
+        return np.mod(np.arctan2(self.y0,self.x0),2*np.pi) if self.fit_method!='global_opt' else None 
     
     @auto_attr
     def x(self):
-        if self.grid_only:
+        if self.fit_method=='grid_only':
             return self.ballpark[0]
         else:
             return self.estimate[0]
         
     @auto_attr
     def y(self):
-        if self.grid_only:
+        if self.fit_method=='grid_only':
             return self.ballpark[1]
         else:
             return self.estimate[1]
         
     @auto_attr
     def sigma(self):
-        if self.grid_only:
+        if self.fit_method=='grid_only':
             return self.ballpark[2]
         else:
             return self.estimate[2]
         
     @auto_attr
     def n(self):
-        if self.grid_only:
+        if self.fit_method=='grid_only':
             return self.ballpark[3]
         else:
             return self.estimate[3]
         
     @auto_attr
     def beta(self):
-        if self.grid_only:
+        if self.fit_method=='grid_only':
             return self.ballpark[4]
         else:
             return self.estimate[4]
     
     @auto_attr
     def baseline(self):
-        if self.grid_only:
+        if self.fit_method=='grid_only':
             return self.ballpark[5]
         else:
             return self.estimate[5]
