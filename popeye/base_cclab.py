@@ -434,7 +434,8 @@ class PopulationFit(object):
     
     @auto_attr
     def ballpark_prediction(self):
-        return self.model.generate_prediction(*np.append(self.brute_force[0],(1,0)), unscaled=True)
+        # return self.model.generate_prediction(*np.append(self.brute_force[0],(1,0)), unscaled=True)
+        return self.model.generate_ballpark_prediction(*self.brute_force[0], self.data, unscaled=True)
     
     @auto_attr
     def scaled_ballpark_prediction(self):
