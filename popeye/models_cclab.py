@@ -603,3 +603,4 @@ class CompressiveSpatialSummationFit(PopulationFit):
     def sigma_size(self):
         return self.sigma / np.sqrt(self.n)
     
+
