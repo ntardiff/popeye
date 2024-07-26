@@ -174,6 +174,34 @@ def distance_mask(x, y, sigma, deg_x, deg_y, amplitude=1):
     
     return mask
 
+
+def generate_og_receptive_field_2d(x,y,sigma,deg_x,deg_y):
+    
+    d = (deg_x-x)**2 + (deg_y-y)**2
+        
+    rf = np.exp(-d / (2.0 * sigma**2))
+    
+    return rf
+
+
+def generate_og_receptive_field(x,y,sigma,deg_x,deg_y):
+    #return rf in 1D for matrix multiplication. Could     
+        
+    rf = generate_og_receptive_field_2d(x,y,sigma,deg_x,deg_y)
+    
+    return np.reshape(rf,(rf.shape[0]*rf.shape[1],1))
+
+def stim2d(stim_arr):
+    stim_arr_long = stim_arr.transpose(2,0,1)
+    stim_arr_long = np.reshape(stim_arr_long,(stim_arr_long.shape[0],-1))
+    
+    return stim_arr_long
+    
+    
+def generate_rf_timeseries(stim_arr,rf):
+    return np.squeeze(np.matmul(stim_arr,rf))
+
+
 def recast_estimation_results(output, grid_parent, overloaded=False):
     
     # load the gridParent

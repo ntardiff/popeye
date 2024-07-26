@@ -18,7 +18,7 @@ from scipy.io import loadmat
 from scipy.signal import square
 
 from popeye.base import StimulusModel
-import popeye.utilities as utils
+import popeye.utilities_cclab as utils
 
 def pixels_per_degree(pixels_across, screen_width, viewing_distance):
     # screen_width_cm = screen_width
@@ -452,7 +452,7 @@ class VisualStimulus(StimulusModel):
             self.stim_arr0 = self.stim_arr
             self.deg_x0 = self.deg_x
             self.deg_y0 = self.deg_y
-            
+    
         else:
             
             # create downsampled stimulus
@@ -465,6 +465,39 @@ class VisualStimulus(StimulusModel):
             self.deg_x0 = utils.generate_shared_array(deg_x0, ctypes.c_double)
             self.deg_y0 = utils.generate_shared_array(deg_y0, ctypes.c_double)
             self.stim_arr0 = utils.generate_shared_array(stim_arr0, dtype)
+
+        
+        # # share coordinate matrices
+        # self.deg_x = utils.generate_shared_array(deg_x, ctypes.c_double)
+        # self.deg_y = utils.generate_shared_array(deg_y, ctypes.c_double)
+        # self.stim_arr_3d = stim_arr #utils.generate_shared_array(stim_arr,dtype)
+        
+        # #make stim array 2d for faster computation
+        # self.stim_arr = utils.generate_shared_array(utils.stim2d(self.stim_arr_3d), dtype)
+        
+        # if self.scale_factor == 1.0:
+            
+        #     self.stim_arr0_3d = stim_arr #utils.generate_shared_array(self.stim_arr_3d,dtype)
+        #     self.deg_x0 = self.deg_x
+        #     self.deg_y0 = self.deg_y
+            
+                        
+        # else:
+            
+        #     # create downsampled stimulus
+        #     self.stim_arr0_3d = resample_stimulus(stim_arr, self.scale_factor)
+        #     ##self.stim_arr0_3d = utils.generate_shared_array(self.stim_arr0_3d,dtype)
+            
+        #     # generate the coordinate matrices
+        #     deg_x0, deg_y0 = generate_coordinate_matrices(self.pixels_across, self.pixels_down, self.ppd, self.scale_factor)
+            
+        #     # share the arrays
+        #     self.deg_x0 = utils.generate_shared_array(deg_x0, ctypes.c_double)
+        #     self.deg_y0 = utils.generate_shared_array(deg_y0, ctypes.c_double)
+        
+        #     #make 2d for faster computation
+        #     ##self.stim_arr0 = utils.generate_shared_array(utils.stim2d(self.stim_arr0_3d), dtype)
+        #     self.stim_arr0 = utils.stim2d(self.stim_arr0_3d)
         
         # add ppd for the down-sampled stimulus
         self.ppd0 = pixels_per_degree(self.pixels_across*self.scale_factor, self.screen_width, self.viewing_distance)
