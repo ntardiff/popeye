@@ -174,6 +174,35 @@ def distance_mask(x, y, sigma, deg_x, deg_y, amplitude=1):
     
     return mask
 
+
+def generate_og_receptive_field_2d(x,y,sigma,deg_x,deg_y):
+    
+    d = (deg_x-x)**2 + (deg_y-y)**2
+        
+    rf = np.exp(-d / (2.0 * sigma**2))
+    
+    return rf
+
+
+def generate_og_receptive_field(x,y,sigma,deg_x,deg_y):
+    #return rf in 1D for matrix multiplication. Could     
+        
+    rf = generate_og_receptive_field_2d(x,y,sigma,deg_x,deg_y)
+    
+    return np.reshape(rf,(rf.shape[0]*rf.shape[1],1))
+
+def stim2d(stim_arr):
+    stim_arr_long = stim_arr.transpose(2,0,1)
+    stim_arr_long = np.reshape(stim_arr_long,(stim_arr_long.shape[0],-1))
+    
+    return stim_arr_long
+
+
+def generate_rf_timeseries(stim_arr,rf):
+    #return np.squeeze(np.matmul(stim_arr,rf))
+    return np.squeeze(stim_arr @ rf)
+
+
 def recast_estimation_results(output, grid_parent, overloaded=False):
     
     # load the gridParent
@@ -425,25 +454,30 @@ def gradient_descent_search(data, error_function, objective_function, parameters
     # else:
     #     output = least_squares(error_function_residual, parameters, bounds=bounds,
     #                            args=(data, objective_function, verbose))
-    output = minimize(error_function_rss, parameters, bounds=bounds, method='SLSQP', #method='COBYLA',
+    output = minimize(error_function, parameters, bounds=bounds, method='SLSQP', #method='COBYLA',
                       args=(data, objective_function, verbose),**kwargs)
 
     return output
 
 
-def global_search(data, error_function, objective_function, bounds, verbose,**kwargs):
+def global_search(data, error_function, objective_function, bounds, verbose,
+                  max_bounds=[-100,100], **kwargs):
 
     
     #minimize accepts None/inf as a bound, but differential evolution doesn't
     bounds = np.array(bounds)
-    bounds[bounds[:,0]==None,0] = -100
-    bounds[bounds[:,1]==None,1] = 100
+    bounds[bounds[:,0]==None,0] = max_bounds[0]
+    bounds[bounds[:,1]==None,1] = max_bounds[1]
     bounds = tuple(map(tuple,bounds)) #back to tuple...maybe not required    
 
-    output = differential_evolution(error_function_rss, bounds=bounds, 
-                      args=(data, objective_function, verbose),**kwargs)
+    output = differential_evolution(error_function, bounds=bounds, 
+                      args=(data, objective_function, verbose,),**kwargs)
 
     return output
+
+def make_dmat(ts):
+    return np.column_stack((ts,np.ones(ts.shape)))
+
 
 @numba.jit(nopython=True, parallel=False)
 def stacker(x,y):
@@ -472,10 +506,21 @@ def check_parameters(parameters, bounds):
     ensemble.extend(parameters)
     return ensemble
 
-def error_function_rss(parameters, data, objective_function, verbose):
+# def error_function_rss(parameters, data, objective_function, verbose):
+#     prediction = objective_function(*parameters)
+#     error = rss(data, prediction)
+#     return error
+
+def error_function_rss(parameters, data, objective_function,verbose):
     prediction = objective_function(*parameters)
-    error = rss(data, prediction)
-    return error
+    error = np.sum((data-prediction)**2)
+    
+    #return something very large if we encounter bad values
+    if np.isfinite(error):
+        return error
+    else:
+        d = data - data.mean()
+        return d.dot(d)*1e10
 
 # generic error function
 def error_function_residual(parameters, data, objective_function, verbose):
@@ -550,7 +595,7 @@ def brute_force_search(data, error_function, objective_function, grids, Ns=None,
     
     # if user provides their own grids
     if isinstance(grids[0], SliceType):
-        output = brute(error_function_rss,
+        output = brute(error_function,
                        args=(data, objective_function, verbose),
                        ranges=grids,
                        finish=None,
@@ -559,7 +604,7 @@ def brute_force_search(data, error_function, objective_function, grids, Ns=None,
 
     # otherwise specify (min,max) and Ns for each dimension
     else:
-        output = brute(error_function_rss,
+        output = brute(error_function,
                args=(data, objective_function, verbose),
                ranges=grids,
                Ns=Ns,
@@ -634,7 +679,7 @@ def error_function(parameters, bounds, data, objective_function, verbose):
 
     return error
 
-def double_gamma_hrf(delay, tr, fptr=1.0, integrator=trapz):
+def double_gamma_hrf(delay, tr, fptr=1.0, integrator=trapz,dtype='float32'):
 
     r"""The double gamma hemodynamic reponse function (HRF).
     The user specifies only the delay of the peak and undershoot.
@@ -691,7 +736,7 @@ def double_gamma_hrf(delay, tr, fptr=1.0, integrator=trapz):
     if integrator: # pragma: no cover
         hrf /= integrator(hrf)
         
-    return hrf
+    return hrf.astype(dtype)
 
 def percent_change(ts, ax=-1):
 

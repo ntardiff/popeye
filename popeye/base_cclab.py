@@ -127,6 +127,7 @@ class PopulationModel(object):
             
         return mask
     
+    @auto_attr
     def hrf(self):
         if hasattr(self, 'hrf_delay'): # pragma: no cover
             return self.hrf_model(self.hrf_delay, self.stimulus.tr_length)
@@ -191,7 +192,10 @@ class PopulationFit(object):
     
     def __init__(self, model, data, grids, bounds, 
                  voxel_index=(1,2,3), Ns=None, auto_fit=True, grid_only=False,
-                 fit_method = '2step', outer_limit=2, nuisance=utils.detrend_psc, verbose=False):
+                 fit_method = '2step', outer_limit=2, max_global_bounds = [-100,100],
+                 error_function = utils.error_function_rss, 
+                 global_opt_args = {'popsize':8, 'workers':1},
+                 nuisance=utils.detrend_psc, verbose=False):
         
         r"""A class containing tools for fitting pRF models.
         
@@ -267,10 +271,13 @@ class PopulationFit(object):
         self.model = model
         self.data = data
         self.nuisance = nuisance
+        self.max_global_bounds = max_global_bounds
+        self.error_function = error_function
+        self.global_opt_args = global_opt_args
         self.verbose, self.very_verbose = set_verbose(verbose)
         
-        assert fit_method in ['2step','grid_only','global_opt'], \
-            'Invalid fit method: must be one of "2step", "grid_only" "global_opt"'
+        if fit_method not in ['2step','grid_only','global_opt']: 
+            raise ValueError('Invalid fit method: must be one of "2step", "grid_only" "global_opt"')
         
         #override fit_method if grid_onlny specified    
         self.fit_method = 'grid_only' if self.grid_only else fit_method
@@ -303,7 +310,7 @@ class PopulationFit(object):
         # compute beta and baseline via linear regression rather
         # than estimate through optimization. Thus, model needs to see
         # the data. Since the data is in shared memory, no overhead incurred.
-        self.model.data = data
+        self.model.data = self.data
         
         # if self.bounds[-2][0] is not None and self.bounds[-2][0] > 0:
         #     self.model.bounded_amplitude = True # +/- amplitudes
@@ -355,7 +362,7 @@ class PopulationFit(object):
     @auto_attr
     def brute_force(self):
         return utils.brute_force_search(self.data,
-                                        utils.error_function,
+                                        self.error_function,
                                         self.model.generate_ballpark_prediction,
                                         self.grids,
                                         self.Ns,
@@ -384,7 +391,7 @@ class PopulationFit(object):
             print('The gridfit solution was %s, starting gradient descent ...' %(self.ballpark))
          
         return utils.gradient_descent_search(self.data,
-                                              utils.error_function,
+                                              self.error_function,
                                               self.model.generate_prediction,
                                               self.ballpark,
                                               self.bounds,
@@ -394,16 +401,17 @@ class PopulationFit(object):
     
     # the global optimization
     @auto_attr
-    def global_opt(self,popsize=8,workers=-1,**kwargs):
+    def global_opt(self):
         
 
         return utils.global_search(self.data,
-                                              utils.error_function,
+                                              self.error_function,
                                               self.model.generate_prediction,
                                               self.bounds,
                                               self.very_verbose,
                                               constraints=self.constraints,
-                                              popsize=popsize,workers=workers,**kwargs)
+                                              max_bounds=self.max_global_bounds,
+                                              **self.global_opt_args)
         
     
     
