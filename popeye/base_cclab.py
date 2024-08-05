@@ -194,7 +194,7 @@ class PopulationFit(object):
                  voxel_index=(1,2,3), Ns=None, auto_fit=True, grid_only=False,
                  fit_method = '2step', outer_limit=2, max_global_bounds = [-100,100],
                  error_function = utils.error_function_rss, 
-                 global_opt_args = {'popsize':8, 'workers':1},
+                 global_opt_args = {}, #{'popsize':12, 'workers':1},
                  nuisance=utils.detrend_psc, verbose=False):
         
         r"""A class containing tools for fitting pRF models.
@@ -276,6 +276,11 @@ class PopulationFit(object):
         self.global_opt_args = global_opt_args
         self.verbose, self.very_verbose = set_verbose(verbose)
         
+        #this is hacky but fine for now as a way of getting the number of parameters in the model
+        #better this than add conditionals everywhere...but should be a better way
+        self.nparams = len(signature(self.model.generate_ballpark_prediction).parameters) - 1
+        self.nparams_full = self.nparams + 2 #slope/intercept
+        
         if fit_method not in ['2step','grid_only','global_opt']: 
             raise ValueError('Invalid fit method: must be one of "2step", "grid_only" "global_opt"')
         
@@ -286,17 +291,23 @@ class PopulationFit(object):
         #We're fitting x,y positions, but we want to fit in a circular region to
         #avoid numerical issues, among other reasons, so set constraints to be used
         #by solvers
+        #this should maybe not be in base...
         self.constraints = (
                 NonlinearConstraint(lambda x: np.sqrt(x[0]**2 + x[1]**2), 
-                                    -np.inf, self.model.stimulus.screen_dva),
+                                    -np.inf, self.model.stimulus.screen_dva,
+                                    keep_feasible=True),
                 NonlinearConstraint(lambda x: np.sqrt(x[0]**2 + x[1]**2) - self.outer_limit*x[2], 
-                                    -np.inf, self.model.stimulus.screen_dva/2)
+                                    -np.inf, self.model.stimulus.screen_dva/2,
+                                    keep_feasible=True)
             )
         
         
         # regress out any 
         if self.nuisance is not None:
             self.data = self.nuisance(self.data)
+            
+        #save rawrss to cut down on computation
+        self.rawrss = utils.rss(self.data,self.data.mean())
             
         # if self.model.nuisance is not None: # pragma: no cover
             # self.model.nuisance_model = sm.OLS(self.data,self.model.nuisance)
@@ -358,6 +369,36 @@ class PopulationFit(object):
         idx = np.argmin(rss)
         return self.model.cached_model_parameters[idx]
     
+    def error_function_lsq(self,parameters, data, objective_function, verbose):
+        
+        prediction = objective_function(*parameters)
+        
+        #minimize algorithms don't obey constraints no matter how hard I try...
+        if np.allclose(prediction,0):
+            return self.rawrss*1e10
+        
+        dmat = np.column_stack((prediction,np.ones(prediction.shape)))
+        try:
+            sol = np.linalg.lstsq(dmat,data,rcond=None)
+        except np.linalg.LinAlgError:
+            return self.rawrss*1e10
+        error = sol[1][0]
+        #return something very large if we encounter bad values
+        
+        if np.isfinite(error):
+            if sol[0][0] >= 0: #check beta for constraint
+                return error
+            else:
+                #given our regression equation, the minimial constrained least squares solution is 
+                #beta = 0, intercept = mean...e.g. the error is the rss of the data
+                return self.rawrss - sol[0][0]
+                #d = data - data.mean()
+                #return d.dot(d) - sol[0][0] # let's help out gradient w/ L1 penality on negative beta
+        else:
+            self.rawrss*1e10
+            #d = data - data.mean()
+            #return d.dot(d)*1e10
+    
     # the brute search
     @auto_attr
     def brute_force(self):
@@ -371,10 +412,7 @@ class PopulationFit(object):
     @auto_attr
     def ballpark(self):
         if self.fit_method=='global_opt':
-            #this is hacky but fine for now as a way of getting the number of parameters in the model
-            #better this than add conditionals everywhere...
-            model_n = len(signature(self.model.generate_ballpark_prediction).parameters) + 2
-            return np.tile(None,model_n)    
+          return np.tile(None,self.nparams_full)    
         
         else:
             if self.model.cached_model_path is not None: # pragma: no cover
@@ -403,15 +441,45 @@ class PopulationFit(object):
     @auto_attr
     def global_opt(self):
         
+        # gopt = utils.global_search(self.data,
+        #                                       self.error_function_lsq, #utils.error_function_lsq,
+        #                                       self.model.generate_prediction_base,
+        #                                       self.bounds[:4],
+        #                                       self.very_verbose,
+        #                                       constraints=self.constraints,
+        #                                       max_bounds=self.max_global_bounds,
+        #                                       **self.global_opt_args)
+        
+        # return gopt
+        
+        # popt = utils.gradient_descent_search(self.data, 
+        #                                      self.error_function_lsq,
+        #                                      self.model.generate_prediction_base, 
+        #                                      gopt.x, self.bounds[:4], self.very_verbose)
+        
+        # return popt
+        
 
         return utils.global_search(self.data,
-                                              self.error_function,
-                                              self.model.generate_prediction,
-                                              self.bounds,
+                                              self.error_function_lsq, #utils.error_function_lsq,
+                                              self.model.generate_prediction_base,
+                                              self.bounds[:4],
                                               self.very_verbose,
                                               constraints=self.constraints,
                                               max_bounds=self.max_global_bounds,
                                               **self.global_opt_args)
+    
+    # def global_opt(self):
+        
+
+    #     return utils.global_search(self.data,
+    #                                           self.error_function,
+    #                                           self.model.generate_prediction,
+    #                                           self.bounds,
+    #                                           self.very_verbose,
+    #                                           constraints=self.constraints,
+    #                                           max_bounds=self.max_global_bounds,
+    #                                           **self.global_opt_args)
         
     
     
@@ -437,7 +505,22 @@ class PopulationFit(object):
         coordinates. 
         
         """
+        # x = self.global_opt.x if self.fit_method=='global_opt' else self.gradient_descent.x
+        # x[3] = np.exp(x[3]) #fitting n on log scale
         
+        # #handle cases where slope/intercept are not part of optimization
+        # if len(x) == self.nparams:
+        #     prediction = self.model.generate_prediction_base(*x)
+        #     betas = utils.lsq(prediction,self.data)[0]
+            
+        #     #when solution has negative beta, best we can do for this prf is intercept-only model
+        #     #just a bad solution...
+        #     if betas[0] < 0:
+        #         betas = [0,self.data.mean()]
+        #     x = np.append(x,betas)
+            
+        # return x
+    
         return self.global_opt.x if self.fit_method=='global_opt' else self.gradient_descent.x
     
     @auto_attr
@@ -456,6 +539,7 @@ class PopulationFit(object):
     @auto_attr
     def intercept(self):
         return self.model.regress(self.ballpark_prediction, self.data)[1]
+     
     
     @auto_attr
     def prediction(self):
@@ -471,10 +555,11 @@ class PopulationFit(object):
     @auto_attr
     def rsquared(self):
         #consider caching the rawrss after normalizing?
-        r2 = 1 - (self.rss / np.sum((self.data - self.data.mean())**2))
+        #r2 = 1 - (self.rss / np.sum((self.data - self.data.mean())**2))
+        r2 = 1 - (self.rss / self.rawrss)
 
         #clean up [adapted from vista rmGet.m]
-        if np.isinf(r2) | np.isnan(r2):
+        if not np.isfinite(r2):
             return 0
         
         r2 = np.maximum(r2, 0)
@@ -488,11 +573,24 @@ class PopulationFit(object):
     
     @auto_attr
     def rsquared0(self):
-        return np.corrcoef(self.data, self.scaled_ballpark_prediction)[1][0]**2 if self.fit_method!='global_opt' else None
+        
+        if self.fit_method!='global_opt':
+            rss0 = utils.rss(self.data, self.scaled_ballpark_prediction)
+            r2 = 1 - (rss0 / self.rawrss)
+
+            #clean up [adapted from vista rmGet.m]
+            if not np.isfinite(r2):
+                return 0
+            
+            r2 = np.maximum(r2, 0)
+            r2 = np.minimum(r2, 1)
+        else:
+            return None
+        #return np.corrcoef(self.data, self.scaled_ballpark_prediction)[1][0]**2 if self.fit_method!='global_opt' else None
     
     @auto_attr
     def rss(self):
-        return np.sum((self.data - self.prediction)**2)
+        return utils.rss(self.data,self.prediction) #np.sum((self.data - self.prediction)**2)
     
     @auto_attr
     def msg(self):

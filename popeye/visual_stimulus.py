@@ -470,4 +470,10 @@ class VisualStimulus(StimulusModel):
         # add ppd for the down-sampled stimulus
         self.ppd0 = pixels_per_degree(self.pixels_across*self.scale_factor, self.screen_width, self.viewing_distance)
         
+        # rescale stim grids according to ppd 
+        # (this roughly follows Vista approach to give iterpretable betas in terms of psc as a function of 
+        # size of stimulus, but mostly doing it for numerical reasons to keep response range consistent/in check)
+        self.stim_arr /= self.ppd**2
+        self.stim_arr0 /= self.ppd0**2
+        
         

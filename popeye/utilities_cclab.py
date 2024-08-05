@@ -201,6 +201,9 @@ def stim2d(stim_arr):
 def generate_rf_timeseries(stim_arr,rf):
     #return np.squeeze(np.matmul(stim_arr,rf))
     return np.squeeze(stim_arr @ rf)
+    #ts = np.squeeze(stim_arr @ rf)
+    #ts[ts==0] = np.finfo(np.float32).tiny #can get into trouble w/ optimization w/ 0s
+    #return ts
 
 
 def recast_estimation_results(output, grid_parent, overloaded=False):
@@ -454,7 +457,7 @@ def gradient_descent_search(data, error_function, objective_function, parameters
     # else:
     #     output = least_squares(error_function_residual, parameters, bounds=bounds,
     #                            args=(data, objective_function, verbose))
-    output = minimize(error_function, parameters, bounds=bounds, method='SLSQP', #method='COBYLA',
+    output = minimize(error_function, parameters, bounds=bounds, method='trust-constr', #method='COBYLA', #method='SLSQP', #method='COBYLA',
                       args=(data, objective_function, verbose),**kwargs)
 
     return output
@@ -478,6 +481,11 @@ def global_search(data, error_function, objective_function, bounds, verbose,
 def make_dmat(ts):
     return np.column_stack((ts,np.ones(ts.shape)))
 
+def lsq(x,y):
+    dmat = make_dmat(x)
+    
+    return np.linalg.lstsq(dmat, y, rcond=None)
+
 
 @numba.jit(nopython=True, parallel=False)
 def stacker(x,y):
@@ -485,7 +493,9 @@ def stacker(x,y):
 
 @numba.jit(nopython=True, parallel=False)
 def rss(data,prediction):
-    return np.nansum((data-prediction)**2)
+    d = data - prediction
+    return d.dot(d)
+    #return np.nansum((data-prediction)**2)
 
 @numba.jit(nopython=True, parallel=False)
 def residual(data,prediction):
@@ -513,11 +523,33 @@ def check_parameters(parameters, bounds):
 
 def error_function_rss(parameters, data, objective_function,verbose):
     prediction = objective_function(*parameters)
-    error = np.sum((data-prediction)**2)
+    d = data - prediction
+    error = d.dot(d)
+    #error = np.sum((data-prediction)**2)
     
     #return something very large if we encounter bad values
     if np.isfinite(error):
         return error
+    else:
+        d = data - data.mean()
+        return d.dot(d)*1e10
+    
+def error_function_lsq(parameters, data, objective_function,verbose):
+    
+    prediction = objective_function(*parameters)
+    dmat = np.column_stack((prediction,np.ones(prediction.shape)))
+    sol = np.linalg.lstsq(dmat,data,rcond=None)
+    error = sol[1][0]
+    #return something very large if we encounter bad values
+    
+    if np.isfinite(error):
+        if sol[0][0] >= 0: #check beta for constraint
+            return error
+        else:
+            #given our regression equation, the minimial constrained least squares solution is 
+            #beta = 0, intercept = mean...e.g. the error is the rss of the data
+            d = data - data.mean()
+            return d.dot(d) - sol[0][0] # let's help out gradient w/ L1 penality on negative beta
     else:
         d = data - data.mean()
         return d.dot(d)*1e10

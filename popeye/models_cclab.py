@@ -437,7 +437,7 @@ class CompressiveSpatialSummationModel(PopulationModel):
         model = fftconvolve(response, self.hrf)[0:len(response)]
         
         # units
-        model = self.normalizer(model)
+        ###model = self.normalizer(model)
         
         # convert units
         #model = zscore(model) #(model - np.mean(model)) / np.mean(model)
@@ -454,6 +454,28 @@ class CompressiveSpatialSummationModel(PopulationModel):
             
             return model
         
+    # main method for deriving model time-series
+    def generate_prediction_base(self, x, y, sigma, n):
+        n = np.exp(n)
+        #sigma = np.exp(sigma)
+        #assert n > 0, 'foo n!'
+        #assert sigma > 0, 'foo sigma!'
+        # generate the RF
+        rf = utils.generate_og_receptive_field(x, y, sigma, self.stimulus.deg_x, self.stimulus.deg_y)
+
+        # extract the stimulus time-series
+        response = utils.generate_rf_timeseries(self.stimulus.stim_arr, rf)
+        
+        # compression
+        response **= n
+
+        model = fftconvolve(response, self.hrf)[0:len(response)]
+        
+        # units
+        ###model = self.normalizer(model)
+        
+        return model
+        
 class CompressiveSpatialSummationFit(PopulationFit):
     
     """
@@ -461,7 +483,8 @@ class CompressiveSpatialSummationFit(PopulationFit):
     
     """
     
-    def __init__(self, model, data, grids, bounds=None, *args, **kwargs):
+    def __init__(self, model, data, grids, bounds=None, 
+                 *args, global_opt_args={'popsize':12, 'workers':1, 'polish': False, 'tol': 0.005}, **kwargs):
                  #voxel_index=(1,2,3), Ns=None, auto_fit=True, grid_only=False, verbose=0):
         
         
@@ -530,14 +553,36 @@ class CompressiveSpatialSummationFit(PopulationFit):
             x_bounds = (-model.stimulus.screen_dva, model.stimulus.screen_dva)
             y_bounds = (-model.stimulus.screen_dva, model.stimulus.screen_dva)
             s_bounds = (0.5/model.stimulus.ppd, model.stimulus.screen_dva/2)
-            n_bounds = (0.01, 1.25)
+            #n_bounds = (0.01, 1.25)
+            n_bounds = (np.log(0.01),np.log(1.25))
             b_bounds = (1e-8, None)
             m_bounds = (None, None)
             bounds = (x_bounds, y_bounds, s_bounds, n_bounds, b_bounds, m_bounds)
 
         
-        PopulationFit.__init__(self, model, data, grids, bounds, 
-                               *args, **kwargs) #voxel_index, Ns, auto_fit, grid_only, verbose)
+        PopulationFit.__init__(self, model, data, grids, bounds,
+                               *args, global_opt_args=global_opt_args, **kwargs) #voxel_index, Ns, auto_fit, grid_only, verbose)
+    
+    @auto_attr
+    def estimate(self):
+        
+        x = PopulationFit.estimate(self)
+        #x[3] = np.exp(x[3]) #fitting n on log scale
+        
+        #handle cases where slope/intercept are not part of optimization
+        if len(x) == self.nparams:
+            prediction = self.model.generate_prediction_base(*x)
+            betas = utils.lsq(prediction,self.data)[0]
+            
+            #when solution has negative beta, best we can do for this prf is intercept-only model
+            #just a bad solution...
+            if betas[0] < 0:
+                betas = [0,self.data.mean()]
+            x = np.append(x,betas)
+            
+        x[3] = np.exp(x[3]) #fitting n on log scale
+            
+        return x
     
     @auto_attr
     def overloaded_estimate(self):
