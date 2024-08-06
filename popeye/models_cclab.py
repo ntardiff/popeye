@@ -14,7 +14,9 @@ import nibabel
 from popeye.onetime import auto_attr
 import popeye.utilities_cclab as utils
 from popeye.base_cclab import PopulationModel, PopulationFit
-from popeye.spinach import generate_og_receptive_field, generate_rf_timeseries, generate_rf_timeseries_nomask
+#from popeye.spinach import generate_og_receptive_field, generate_rf_timeseries, generate_rf_timeseries_nomask
+
+from scipy.optimize import lsq_linear
 
 class GaussianModel(PopulationModel):
     
@@ -65,21 +67,23 @@ class GaussianModel(PopulationModel):
         """
         
         # mask for speed
-        mask = self.distance_mask_coarse(x, y, sigma)
+        #mask = self.distance_mask_coarse(x, y, sigma)
         
         # generate the RF
-        rf = generate_og_receptive_field(x, y, sigma, self.stimulus.deg_x0, self.stimulus.deg_y0)
-        rf /= (2 * np.pi * sigma**2) * 1/np.diff(self.stimulus.deg_x0[0,0:2])**2
+        rf = utils.generate_og_receptive_field(x, y, sigma, self.stimulus.deg_x0, self.stimulus.deg_y0)
+        #rf = generate_og_receptive_field(x, y, sigma, self.stimulus.deg_x0, self.stimulus.deg_y0)
+        #rf /= (2 * np.pi * sigma**2) * 1/np.diff(self.stimulus.deg_x0[0,0:2])**2
                 
         # extract the stimulus time-series
-        response = generate_rf_timeseries(self.stimulus.stim_arr0, rf, mask)
+        response = utils.generate_rf_timeseries(self.stimulus.stim_arr0, rf)
+        #response = generate_rf_timeseries_nomask(self.stimulus.stim_arr0, rf)
         
         # convolve it with the stimulus
-        model = fftconvolve(response, self.hrf())[0:len(response)]
+        model = fftconvolve(response, self.hrf)[0:len(response)]
         
         # units
         model = self.normalizer(model)
-        
+      
         # regress out mean and amplitude
         beta, baseline = self.regress(model, self.data)
         
@@ -117,17 +121,19 @@ class GaussianModel(PopulationModel):
         """
         
         # mask for speed
-        mask = self.distance_mask(x, y, sigma)
+        #mask = self.distance_mask(x, y, sigma)
         
         # generate the RF
-        rf = generate_og_receptive_field(x, y, sigma, self.stimulus.deg_x, self.stimulus.deg_y)
-        rf /= (2 * np.pi * sigma**2) * 1/np.diff(self.stimulus.deg_x[0,0:2])**2
+        rf = utils.generate_og_receptive_field(x, y, sigma, self.stimulus.deg_x, self.stimulus.deg_y)
+        #rf = generate_og_receptive_field(x, y, sigma, self.stimulus.deg_x, self.stimulus.deg_y)
+        #rf /= (2 * np.pi * sigma**2) * 1/np.diff(self.stimulus.deg_x[0,0:2])**2
         
         # extract the stimulus time-series
-        response = generate_rf_timeseries(self.stimulus.stim_arr, rf, mask)
+        #response = generate_rf_timeseries_nomask(self.stimulus.stim_arr, rf)
+        response = utils.generate_rf_timeseries(self.stimulus.stim_arr, rf)
         
         # convolve it with the stimulus
-        model = fftconvolve(response, self.hrf())[0:len(response)]
+        model = fftconvolve(response, self.hrf)[0:len(response)]
         
         # units
         model = self.normalizer(model)
@@ -349,14 +355,16 @@ class CompressiveSpatialSummationModel(PopulationModel):
         # mask = self.distance_mask_coarse(x, y, sigma)
 
         # generate the RF
-        rf = generate_og_receptive_field(x, y, sigma,self.stimulus.deg_x0, self.stimulus.deg_y0)
+        #rf = generate_og_receptive_field(x, y, sigma,self.stimulus.deg_x0, self.stimulus.deg_y0)
+        rf = utils.generate_og_receptive_field(x, y, sigma,self.stimulus.deg_x0, self.stimulus.deg_y0)
         
         # normalize by the integral (this is not necessary if normalizing below)
         #rf /= ((2 * np.pi * sigma**2) * 1/np.diff(self.stimulus.deg_x0[0,0:2])**2)
         
         # extract the stimulus time-series
         # response = generate_rf_timeseries(self.stimulus.stim_arr0, rf, mask)
-        response = generate_rf_timeseries_nomask(self.stimulus.stim_arr0, rf)
+        #response = generate_rf_timeseries_nomask(self.stimulus.stim_arr0, rf)
+        response = utils.generate_rf_timeseries(self.stimulus.stim_arr0, rf)
         
         # compression
         response **= n
@@ -365,10 +373,26 @@ class CompressiveSpatialSummationModel(PopulationModel):
         # hrf = self.hrf_model(self.hrf_delay, self.stimulus.tr_length)
         # # convolve it with the stimulus
         # model = fftconvolve(response, hrf)[0:len(response)]
-        model = fftconvolve(response, self.hrf())[0:len(response)]
+        model = fftconvolve(response, self.hrf)[0:len(response)]
         
         # units
         model = self.normalizer(model)
+        
+        ### REGRESSION TESTING CODE ####
+        dmat = utils.make_dmat(model)
+        
+        lsql_sol = lsq_linear(dmat, self.data, bounds=((0,-np.inf),(np.inf,np.inf)), 
+                                        method='bvls')
+        
+        lsq_sol = np.linalg.lstsq(dmat,self.data,rcond=None)
+        
+        if lsq_sol[0][0] < 0 and not np.all(np.abs(lsql_sol.x-np.array([0,self.data.mean()]))<1e-6):
+            print('foo!')
+            print(self.data.mean())
+            print(lsql_sol.x)
+            #print(lsql_sol.x-np.array([0,self.data.mean()]))
+        
+        ### END REGRESSION TESTING CODE ###
 
         # units
         #model = zscore(model) #(model - np.mean(model)) / np.mean(model)
@@ -391,14 +415,16 @@ class CompressiveSpatialSummationModel(PopulationModel):
         # mask = self.distance_mask(x, y, sigma)
 
         # generate the RF
-        rf = generate_og_receptive_field(x, y, sigma, self.stimulus.deg_x, self.stimulus.deg_y)
+        ###rf = generate_og_receptive_field(x, y, sigma, self.stimulus.deg_x, self.stimulus.deg_y)
+        rf = utils.generate_og_receptive_field(x, y, sigma, self.stimulus.deg_x, self.stimulus.deg_y)
         
         # normalize by the integral (this is not necessary if normalizing below)
         #rf /= ((2 * np.pi * sigma**2) * 1/np.diff(self.stimulus.deg_x[0,0:2])**2)
         
         # extract the stimulus time-series
         # response = generate_rf_timeseries(self.stimulus.stim_arr, rf, mask)
-        response = generate_rf_timeseries_nomask(self.stimulus.stim_arr, rf)
+        ###response = generate_rf_timeseries_nomask(self.stimulus.stim_arr, rf)
+        response = utils.generate_rf_timeseries(self.stimulus.stim_arr, rf)
         
         # compression
         response **= n
@@ -408,10 +434,10 @@ class CompressiveSpatialSummationModel(PopulationModel):
         
         # # convolve it with the stimulus
         # model = fftconvolve(response, hrf)[0:len(response)]
-        model = fftconvolve(response, self.hrf())[0:len(response)]
+        model = fftconvolve(response, self.hrf)[0:len(response)]
         
         # units
-        model = self.normalizer(model)
+        ###model = self.normalizer(model)
         
         # convert units
         #model = zscore(model) #(model - np.mean(model)) / np.mean(model)
@@ -428,6 +454,28 @@ class CompressiveSpatialSummationModel(PopulationModel):
             
             return model
         
+    # main method for deriving model time-series
+    def generate_prediction_base(self, x, y, sigma, n):
+        n = np.exp(n)
+        #sigma = np.exp(sigma)
+        #assert n > 0, 'foo n!'
+        #assert sigma > 0, 'foo sigma!'
+        # generate the RF
+        rf = utils.generate_og_receptive_field(x, y, sigma, self.stimulus.deg_x, self.stimulus.deg_y)
+
+        # extract the stimulus time-series
+        response = utils.generate_rf_timeseries(self.stimulus.stim_arr, rf)
+        
+        # compression
+        response **= n
+
+        model = fftconvolve(response, self.hrf)[0:len(response)]
+        
+        # units
+        ###model = self.normalizer(model)
+        
+        return model
+        
 class CompressiveSpatialSummationFit(PopulationFit):
     
     """
@@ -435,7 +483,8 @@ class CompressiveSpatialSummationFit(PopulationFit):
     
     """
     
-    def __init__(self, model, data, grids, bounds=None, *args, **kwargs):
+    def __init__(self, model, data, grids, bounds=None, 
+                 *args, global_opt_args={'popsize':12, 'workers':1, 'polish': False, 'tol': 0.005}, **kwargs):
                  #voxel_index=(1,2,3), Ns=None, auto_fit=True, grid_only=False, verbose=0):
         
         
@@ -504,14 +553,36 @@ class CompressiveSpatialSummationFit(PopulationFit):
             x_bounds = (-model.stimulus.screen_dva, model.stimulus.screen_dva)
             y_bounds = (-model.stimulus.screen_dva, model.stimulus.screen_dva)
             s_bounds = (0.5/model.stimulus.ppd, model.stimulus.screen_dva/2)
-            n_bounds = (0.01, 1.25)
+            #n_bounds = (0.01, 1.25)
+            n_bounds = (np.log(0.01),np.log(1.25))
             b_bounds = (1e-8, None)
             m_bounds = (None, None)
             bounds = (x_bounds, y_bounds, s_bounds, n_bounds, b_bounds, m_bounds)
 
         
-        PopulationFit.__init__(self, model, data, grids, bounds, 
-                               *args, **kwargs) #voxel_index, Ns, auto_fit, grid_only, verbose)
+        PopulationFit.__init__(self, model, data, grids, bounds,
+                               *args, global_opt_args=global_opt_args, **kwargs) #voxel_index, Ns, auto_fit, grid_only, verbose)
+    
+    @auto_attr
+    def estimate(self):
+        
+        x = PopulationFit.estimate(self)
+        #x[3] = np.exp(x[3]) #fitting n on log scale
+        
+        #handle cases where slope/intercept are not part of optimization
+        if len(x) == self.nparams:
+            prediction = self.model.generate_prediction_base(*x)
+            betas = utils.lsq(prediction,self.data)[0]
+            
+            #when solution has negative beta, best we can do for this prf is intercept-only model
+            #just a bad solution...
+            if betas[0] < 0:
+                betas = [0,self.data.mean()]
+            x = np.append(x,betas)
+            
+        x[3] = np.exp(x[3]) #fitting n on log scale
+            
+        return x
     
     @auto_attr
     def overloaded_estimate(self):

@@ -18,7 +18,7 @@ from scipy.io import loadmat
 from scipy.signal import square
 
 from popeye.base import StimulusModel
-import popeye.utilities as utils
+import popeye.utilities_cclab as utils
 
 def pixels_per_degree(pixels_across, screen_width, viewing_distance):
     # screen_width_cm = screen_width
@@ -393,7 +393,7 @@ class VisualStimulus(StimulusModel):
     
     
     def __init__(self, stim_arr, viewing_distance, screen_width,
-                 scale_factor, tr_length, dtype, interp='nearest'):
+                 scale_factor, tr_length, dtype=ctypes.c_float, interp='nearest'):
         
         """
         
@@ -443,9 +443,10 @@ class VisualStimulus(StimulusModel):
         deg_x, deg_y = generate_coordinate_matrices(self.pixels_across, self.pixels_down, self.ppd)
         
         # share coordinate matrices
-        self.deg_x = utils.generate_shared_array(deg_x, ctypes.c_double)
-        self.deg_y = utils.generate_shared_array(deg_y, ctypes.c_double)
-        self.stim_arr = utils.generate_shared_array(stim_arr, dtype)
+        self.deg_x = utils.generate_shared_array(deg_x, dtype) #ctypes.c_double)
+        self.deg_y = utils.generate_shared_array(deg_y, dtype) #ctypes.c_double)
+        ###self.stim_arr = utils.generate_shared_array(stim_arr, dtype)
+        self.stim_arr = utils.generate_shared_array(utils.stim2d(stim_arr), dtype)
         
         if self.scale_factor == 1.0:
             
@@ -462,11 +463,17 @@ class VisualStimulus(StimulusModel):
             deg_x0, deg_y0 = generate_coordinate_matrices(self.pixels_across, self.pixels_down, self.ppd, self.scale_factor)
             
             # share the arrays
-            self.deg_x0 = utils.generate_shared_array(deg_x0, ctypes.c_double)
-            self.deg_y0 = utils.generate_shared_array(deg_y0, ctypes.c_double)
-            self.stim_arr0 = utils.generate_shared_array(stim_arr0, dtype)
+            self.deg_x0 = utils.generate_shared_array(deg_x0, dtype) #ctypes.c_double)
+            self.deg_y0 = utils.generate_shared_array(deg_y0, dtype) #ctypes.c_double)
+            self.stim_arr0 = utils.generate_shared_array(utils.stim2d(stim_arr0), dtype)
         
         # add ppd for the down-sampled stimulus
         self.ppd0 = pixels_per_degree(self.pixels_across*self.scale_factor, self.screen_width, self.viewing_distance)
+        
+        # rescale stim grids according to ppd 
+        # (this roughly follows Vista approach to give iterpretable betas in terms of psc as a function of 
+        # size of stimulus, but mostly doing it for numerical reasons to keep response range consistent/in check)
+        self.stim_arr /= self.ppd**2
+        self.stim_arr0 /= self.ppd0**2
         
         
