@@ -14,6 +14,7 @@ import numpy as np
 import numexpr as ne
 from scipy.optimize import NonlinearConstraint
 from inspect import signature
+from numba import jit
 
 try:  # pragma: no cover
     from types import SliceType
@@ -267,9 +268,9 @@ class PopulationFit(object):
         self.voxel_index = voxel_index
         self.auto_fit = auto_fit
         self.grid_only = grid_only #leaving this flag in for backward compatibility
-        self.outer_limit = outer_limit
+        self.outer_limit = np.float32(outer_limit)
         self.model = model
-        self.data = data
+        self.data = data.astype(np.float32)
         self.nuisance = nuisance
         self.max_global_bounds = max_global_bounds
         self.error_function = error_function
@@ -293,10 +294,10 @@ class PopulationFit(object):
         #by solvers
         #this should maybe not be in base...
         self.constraints = (
-                NonlinearConstraint(lambda x: np.sqrt(x[0]**2 + x[1]**2), 
+                NonlinearConstraint(lambda x: utils.dist_con(x.astype(np.float32)), #lambda x: np.sqrt(x[0]**2 + x[1]**2), 
                                     -np.inf, self.model.stimulus.screen_dva,
                                     keep_feasible=True),
-                NonlinearConstraint(lambda x: np.sqrt(x[0]**2 + x[1]**2) - self.outer_limit*x[2], 
+                NonlinearConstraint(lambda x: utils.prfsize_con(x.astype(np.float32),self.outer_limit), #np.sqrt(x[0]**2 + x[1]**2) - self.outer_limit*x[2], 
                                     -np.inf, self.model.stimulus.screen_dva/2,
                                     keep_feasible=True)
             )
@@ -307,7 +308,7 @@ class PopulationFit(object):
             self.data = self.nuisance(self.data)
             
         #save rawrss to cut down on computation
-        self.rawrss = utils.rss(self.data,self.data.mean())
+        self.rawrss = np.float32(utils.rss(self.data,self.data.mean()))
             
         # if self.model.nuisance is not None: # pragma: no cover
             # self.model.nuisance_model = sm.OLS(self.data,self.model.nuisance)
@@ -369,35 +370,46 @@ class PopulationFit(object):
         idx = np.argmin(rss)
         return self.model.cached_model_parameters[idx]
     
+    
+
     def error_function_lsq(self,parameters, data, objective_function, verbose):
         
-        prediction = objective_function(*parameters)
+        prediction = objective_function(*parameters.astype(np.float32))
         
-        #minimize algorithms don't obey constraints no matter how hard I try...
-        if np.allclose(prediction,0):
-            return self.rawrss*1e10
+        #error = utils.do_lsq_error(prediction,data,self.rawrss)
         
-        dmat = np.column_stack((prediction,np.ones(prediction.shape)))
-        try:
-            sol = np.linalg.lstsq(dmat,data,rcond=None)
-        except np.linalg.LinAlgError:
-            return self.rawrss*1e10
-        error = sol[1][0]
-        #return something very large if we encounter bad values
+        return utils.do_lsq_error(prediction,data,self.rawrss) #np.float32(error)
+
+
+    # def error_function_lsq(self,parameters, data, objective_function, verbose):
         
-        if np.isfinite(error):
-            if sol[0][0] >= 0: #check beta for constraint
-                return error
-            else:
-                #given our regression equation, the minimial constrained least squares solution is 
-                #beta = 0, intercept = mean...e.g. the error is the rss of the data
-                return self.rawrss - sol[0][0]
-                #d = data - data.mean()
-                #return d.dot(d) - sol[0][0] # let's help out gradient w/ L1 penality on negative beta
-        else:
-            self.rawrss*1e10
-            #d = data - data.mean()
-            #return d.dot(d)*1e10
+    #     prediction = objective_function(*parameters.astype(np.float32))
+        
+    #     #minimize algorithms don't obey constraints no matter how hard I try...
+    #     if np.allclose(prediction,0):
+    #         return self.rawrss*1e10
+        
+    #     dmat = np.column_stack((prediction,np.ones(prediction.shape,dtype=np.float32)))
+    #     try:
+    #         sol = np.linalg.lstsq(dmat,data,rcond=None)
+    #     except np.linalg.LinAlgError:
+    #         return self.rawrss*1e10
+    #     error = sol[1][0]
+    #     #return something very large if we encounter bad values
+        
+    #     if np.isfinite(error):
+    #         if sol[0][0] >= 0: #check beta for constraint
+    #             return error
+    #         else:
+    #             #given our regression equation, the minimial constrained least squares solution is 
+    #             #beta = 0, intercept = mean...e.g. the error is the rss of the data
+    #             return self.rawrss - sol[0][0]
+    #             #d = data - data.mean()
+    #             #return d.dot(d) - sol[0][0] # let's help out gradient w/ L1 penality on negative beta
+    #     else:
+    #         return self.rawrss*1e10
+    #         #d = data - data.mean()
+    #         #return d.dot(d)*1e10
     
     # the brute search
     @auto_attr

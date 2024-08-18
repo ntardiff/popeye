@@ -23,7 +23,7 @@ from scipy.integrate import romb, trapz
 # from numpy import log, pi, sqrt, square, diagonal
 # from numpy.random import randn, seed
 import sharedmem
-import numba
+from numba import jit, types
 
 # Python 3 compatibility below:
 try:  # pragma: no cover
@@ -175,6 +175,7 @@ def distance_mask(x, y, sigma, deg_x, deg_y, amplitude=1):
     return mask
 
 
+@jit(nopython=True,parallel=False)
 def generate_og_receptive_field_2d(x,y,sigma,deg_x,deg_y):
     
     d = (deg_x-x)**2 + (deg_y-y)**2
@@ -183,13 +184,12 @@ def generate_og_receptive_field_2d(x,y,sigma,deg_x,deg_y):
     
     return rf
 
-
 def generate_og_receptive_field(x,y,sigma,deg_x,deg_y):
     #return rf in 1D for matrix multiplication. Could     
         
     rf = generate_og_receptive_field_2d(x,y,sigma,deg_x,deg_y)
     
-    return np.reshape(rf,(rf.shape[0]*rf.shape[1],1))
+    return np.reshape(rf,(rf.shape[0]*rf.shape[1],1)).astype(np.float32)
 
 def stim2d(stim_arr):
     stim_arr_long = stim_arr.transpose(2,0,1)
@@ -198,9 +198,17 @@ def stim2d(stim_arr):
     return stim_arr_long
 
 
+# @jit(nopython=True,parallel=False)
+# def generate_rf_timeseries_base(stim_arr,rf):
+#     return np.dot(stim_arr,rf)
+
+
+#have not found that this benefits from numba on local machine...
 def generate_rf_timeseries(stim_arr,rf):
+    #return np.squeeze(generate_rf_timeseries_base(stim_arr,rf))
+    return np.squeeze(np.dot(stim_arr,rf))
     #return np.squeeze(np.matmul(stim_arr,rf))
-    return np.squeeze(stim_arr @ rf)
+    #return np.squeeze(stim_arr @ rf)
     #ts = np.squeeze(stim_arr @ rf)
     #ts[ts==0] = np.finfo(np.float32).tiny #can get into trouble w/ optimization w/ 0s
     #return ts
@@ -479,7 +487,7 @@ def global_search(data, error_function, objective_function, bounds, verbose,
     return output
 
 def make_dmat(ts):
-    return np.column_stack((ts,np.ones(ts.shape)))
+    return np.column_stack((ts,np.ones(ts.shape,dtype=np.float32)))
 
 def lsq(x,y):
     dmat = make_dmat(x)
@@ -487,21 +495,21 @@ def lsq(x,y):
     return np.linalg.lstsq(dmat, y, rcond=None)
 
 
-@numba.jit(nopython=True, parallel=False)
+@jit(nopython=True, parallel=False)
 def stacker(x,y):
     return np.hstack((x,y))
 
-@numba.jit(nopython=True, parallel=False)
+@jit(nopython=True, parallel=False)
 def rss(data,prediction):
     d = data - prediction
     return d.dot(d)
     #return np.nansum((data-prediction)**2)
 
-@numba.jit(nopython=True, parallel=False)
+@jit(nopython=True, parallel=False)
 def residual(data,prediction):
     return (data-prediction)**2
 
-@numba.jit(nopython=True, parallel=False)
+@jit(nopython=True, parallel=False)
 def check_parameters(parameters, bounds):
     for i in range(len(parameters)):
         b = bounds[i]
@@ -533,6 +541,52 @@ def error_function_rss(parameters, data, objective_function,verbose):
     else:
         d = data - data.mean()
         return d.dot(d)*1e10
+    
+    
+@jit(nopython=True,parallel=False)
+def do_lsq_error(prediction, data, rawrss):
+    
+    #minimize algorithms don't obey constraints no matter how hard I try...
+    if np.allclose(prediction,0):
+        return rawrss*1e10
+    
+    dmat = np.column_stack((prediction,np.ones(prediction.shape,dtype=np.float32)))
+    try:
+        sol = np.linalg.lstsq(dmat,data)
+    except Exception:
+        #return something very large if we encounter bad values
+        return rawrss*1e10
+    error = sol[1][0]
+    
+    if sol[0][0] >= 0: #check beta for constraint
+        return error
+    else:
+        #given our regression equation, the minimial constrained least squares solution is 
+        #beta = 0, intercept = mean...e.g. the error is the rss of the data
+        return rawrss - sol[0][0]
+        #d = data - data.mean()
+        #return d.dot(d) - sol[0][0] # let's help out gradient w/ L1 penality on negative beta
+    
+    # if np.isfinite(error):
+    #     if sol[0][0] >= 0: #check beta for constraint
+    #         return error
+    #     else:
+    #         #given our regression equation, the minimial constrained least squares solution is 
+    #         #beta = 0, intercept = mean...e.g. the error is the rss of the data
+    #         return rawrss - sol[0][0]
+    #         #d = data - data.mean()
+    #         #return d.dot(d) - sol[0][0] # let's help out gradient w/ L1 penality on negative beta
+    # else:
+    #     return rawrss*1e10
+    
+
+@jit(nopython=True,parallel=False)    
+def dist_con(x):
+    return np.sqrt(x[0]**2 + x[1]**2)
+    
+@jit(nopython=True,parallel=False)   
+def prfsize_con(x,outer_limit):
+    return np.sqrt(x[0]**2 + x[1]**2) - outer_limit*x[2]
     
 def error_function_lsq(parameters, data, objective_function,verbose):
     
